@@ -10,4 +10,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class UiProperties {
 
     private String baseUrl;
+    private boolean headless = true;
 }

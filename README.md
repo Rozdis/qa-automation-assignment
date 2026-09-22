@@ -58,6 +58,7 @@ src/main/java/com/flamingo/qa/
   api/graphql/        Small object-based GraphQL query/fragment/variable builder
   ui/model/           Gender, Hobby, StudentRegistration — UI domain data
   ui/pages/           PracticeFormPage, SubmissionModal — Page Object Model
+  ui/steps/           PracticeFormSteps — higher-level actions composed from page objects
 
 src/test/java/com/flamingo/qa/
   base/               Shared Spring context bootstrap, idempotent Allure filter registration
@@ -74,25 +75,24 @@ Reusable framework code (clients, models, page objects, config) lives under `src
 
 ## Test Strategy
 
-- **Independence over ordering**: every test creates and cleans up its own data (`@AfterEach`), so any test can run alone or in any order — nothing depends on execution sequence.
-- **Config over hardcoding**: base URLs and credentials are bound via Spring `@ConfigurationProperties` from `application.properties`, not hardcoded in test code, so environments can be swapped without touching test logic.
-- **Structured query building over string literals**: GraphQL queries are composed from a small object DSL (`GraphQlQuery`/`GraphQlField`/`GraphQlFragment`) instead of hand-written strings, except where a test's entire point is invalid syntax (the malformed-query negative test), where a literal is unavoidable by definition.
-- **Negative tests verify real effect, not just status codes**: e.g. the invalid-token update/delete tests re-fetch the booking afterward to confirm it was genuinely untouched, not just that the response code looked right.
-- **Assertions are specific**: error-message assertions check the message actually names the right problem (e.g. `contains("nonExistentField")`) rather than merely `isNotBlank()`, so a test can't pass against an unrelated failure.
-- **UI waits**: Playwright's built-in auto-waiting handles most interactions; the one place that needs an explicit wait — the success modal appearing after submit, since the click itself returns before the async UI update completes — has its own `waitUntilDisplayed()` on the page object.
-- **Data-driven where it adds real coverage**: booking creation runs against three varied payloads via `@ParameterizedTest` + `@MethodSource`, and the GraphQL pagination test runs against multiple `first` values, so each exercises more than a single hardcoded case without duplicating test logic.
-- **Parallel-safe by construction**: test classes run concurrently (`junit-platform.properties`), which only works because API clients hold no mutable shared state (each takes its base URL as a constructor argument) and tests never cache anything — like an auth token — in state shared across sibling classes.
+- Every test creates and cleans up its own data (`@AfterEach`) — no ordering dependencies.
+- Base URLs/credentials come from `application.properties` via Spring, not hardcoded.
+- GraphQL queries are built with a small object DSL (`GraphQlQuery`/`GraphQlField`/`GraphQlFragment`), not raw strings — except the malformed-query negative test, where a literal is the point.
+- Negative tests check real state, not just status codes (e.g. invalid-token update/delete tests re-fetch the booking to confirm nothing changed).
+- Error-message assertions check the message names the actual problem, not just that it's non-blank.
+- UI relies on Playwright's auto-waiting; only the post-submit success modal needs an explicit `waitUntilDisplayed()`.
+- Booking creation and GraphQL pagination are parameterized to cover multiple cases per test.
+- Test classes run in parallel — safe because API are stateless (base URL via constructor, no cached tokens or shared mutable state).
 
 ## Challenges & Solutions
 
-- **Required-field validation on the DemoQA form isn't a CSS class.** It's native HTML5 constraint validation (`required` attribute), not a Bootstrap `is-invalid` class as commonly assumed. Fixed by checking `element.checkValidity()` via JS evaluation instead.
-- **Subjects autocomplete raced with native form submission.** Pressing Enter before the dropdown suggestion was confirmed sometimes fell through as a plain Enter keypress, which native-submitted the form prematurely. Fixed by clicking the actual suggestion option (Playwright auto-waits for it) instead of relying on keyboard timing.
-- **DemoQA's fixed ad banner overlaps the Submit button** at the viewport size used, intercepting the click. Removed it via JS (`element.remove()`) immediately before submitting.
-- **Found a genuine bug in DemoQA itself**: clicking the success modal's Close button throws `TypeError: Lr.findDOMNode is not a function` inside their React bundle and never closes the modal — reproduced identically via both a real Playwright click and a raw native DOM click. Documented as a deliberately failing test (`shouldCloseSubmissionModal`) rather than silently working around it, since it isn't a defect in this test suite.
-- **Allure attachments could go missing depending on class execution order.** Only one base test class was registering the Allure/REST-Assured filter, so GraphQL requests risked being excluded from the report (or double-attached) depending on which test classes ran first. Centralized registration into a single idempotent, guarded helper shared by both API base classes.
-- **PowerShell JSON parsing broke down during manual GraphQL schema introspection** (`ConvertFrom-Json` failed on deeply nested introspection responses) — worked around by using `curl.exe` with an explicit no-BOM UTF-8 request file instead of `Invoke-RestMethod`, purely as a one-off exploration tool (not part of the shipped suite).
-- **Parallel execution exposed a real thread-safety bug before it ever ran in CI**: `BaseApiTest` originally cached the Restful Booker auth token in a `static` field. Since it's declared in the shared abstract base class, sibling subclasses (`BookingCrudTest`, `BookingNegativeTest`) don't get separate copies — they share the one static slot. Under class-level parallelism that's a genuine race. Fixed by removing the cache entirely: `authenticate()` is now called fresh wherever a token is needed. As part of the same fix, `BookingApiClient` now takes its base URL as a constructor argument (mirroring `GraphQlClient`) instead of relying on the global mutable `RestAssured.baseURI`, removing the last piece of shared mutable state from the API layer.
-- **The one `known-issue`-tagged test would otherwise always redden CI.** Since it deliberately documents a live, reproducible DemoQA bug (see above) rather than a defect in this suite, CI excludes just that tag (`-DexcludedGroups=known-issue`) so the pipeline reports a meaningful green/red signal instead of a permanent, uninformative failure — while `mvn clean test` locally still runs and shows it by default, keeping the bug visible during normal development.
+- DemoQA's "required" validation is native HTML5 (`checkValidity()`), not a CSS class as it first appears.
+- A fixed ad banner overlapped the Submit button — removed via JS before submitting.
+- Found a real DemoQA bug: the success modal's Close button throws inside their React bundle and never closes it. Kept as a deliberately failing, `known-issue`-tagged test rather than working around it.
+- Allure's REST-Assured filter was only registered in one base class, so GraphQL calls could be missing from the report — centralized into one shared helper.
+- Parallel execution exposed a real race: the auth token was cached in a `static` field shared across test classes. Removed the cache and gave `BookingApiClient` a constructor-injected base URL, matching `GraphQlClient`.
+- The `known-issue` test would always fail CI, so it's excluded there (`-DexcludedGroups=known-issue`) while still running by default locally.
+- CI launched Chromium headed (`setHeadless(false)`), which crashes on GitHub Actions' runners (no X server) and fails `BaseUiTest`'s shared `@BeforeAll` before any UI test method runs — this looked like tag exclusion wasn't working, since the whole class errors out as one unit regardless of which methods remain. Fixed by binding headless mode to `ui.headless` (`UiProperties`, default `true`), read from the Spring context via an `ApplicationContext` parameter on the static `@BeforeAll` method.
 
 ## What I Would Add With More Time
 

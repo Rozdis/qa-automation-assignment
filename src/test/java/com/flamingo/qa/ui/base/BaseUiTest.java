@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
 @Tag("ui")
@@ -29,9 +30,10 @@ public abstract class BaseUiTest {
     protected Page page;
 
     @BeforeAll
-    static void launchBrowser() {
+    static void launchBrowser(ApplicationContext context) {
+        UiProperties uiProperties = context.getBean(UiProperties.class);
         playwright = Playwright.create();
-        browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(false));
+        browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(uiProperties.isHeadless()));
     }
 
     @BeforeEach
