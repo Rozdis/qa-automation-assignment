@@ -1,0 +1,17 @@
+# Build output
+target/
+
+# Allure CLI (downloaded by allure-maven plugin)
+.allure/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+
+# Logs
+*.log
