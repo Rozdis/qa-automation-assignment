@@ -30,7 +30,7 @@ mvn test -Dgroups="api"
 # Run only UI tests
 mvn test -Dgroups="ui"
 
-# Exclude the one known-issue test that documents a live DemoQA bug (see Challenges & Solutions)
+# Exclude the one known-issue test that documents a live DemoQA bug (see Challenges & Solutions) — CI runs it and lets it fail
 mvn test -DexcludedGroups="known-issue"
 ```
 
@@ -44,6 +44,8 @@ Test classes run in parallel with each other (methods within a class stay sequen
   mvn allure:report
   ```
   then open `target/site/allure-maven-plugin/index.html`. Includes REST Assured request/response details for every API/GraphQL call and embedded screenshots for failed UI tests.
+  - **Locally, in IntelliJ**: open `index.html` from the project tree and use "Open in Browser".
+  - **Downloaded CI artifact**: extract the zip, then run `allure open <extracted-folder>` ([Allure CLI](https://github.com/allure-framework/allure2/releases)) and open the printed URL.
 - **UI failure screenshots**: also saved individually to `target/screenshots/`.
 
 Note: with parallel class execution enabled, Surefire's plain-text per-class `.txt` summaries can misattribute *which* class a passing test count belongs to (a known Surefire/JUnit5-parallel interaction) — the *overall* pass/fail total is still correct, and the Allure report (which writes one independent result file per test) is unaffected either way, so it's the reliable source for a per-test/per-class breakdown.
@@ -91,7 +93,7 @@ Reusable framework code (clients, models, page objects, config) lives under `src
 - Found a real DemoQA bug: the success modal's Close button throws inside their React bundle and never closes it. Kept as a deliberately failing, `known-issue`-tagged test rather than working around it.
 - Allure's REST-Assured filter was only registered in one base class, so GraphQL calls could be missing from the report — centralized into one shared helper.
 - Parallel execution exposed a real race: the auth token was cached in a `static` field shared across test classes. Removed the cache and gave `BookingApiClient` a constructor-injected base URL, matching `GraphQlClient`.
-- The `known-issue` test would always fail CI, so it's excluded there (`-DexcludedGroups=known-issue`) while still running by default locally.
+- The `known-issue` test always fails — that's intentional, so CI stays honest about the live DemoQA bug rather than hiding it; exclude it locally with `-DexcludedGroups=known-issue` if needed.
 - CI launched Chromium headed (`setHeadless(false)`), which crashes on GitHub Actions' runners (no X server) and fails `BaseUiTest`'s shared `@BeforeAll` before any UI test method runs — this looked like tag exclusion wasn't working, since the whole class errors out as one unit regardless of which methods remain. Fixed by binding headless mode to `ui.headless` (`UiProperties`, default `true`), read from the Spring context via an `ApplicationContext` parameter on the static `@BeforeAll` method.
 
 ## What I Would Add With More Time

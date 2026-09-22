@@ -25,7 +25,7 @@ jobs:
         run: mvn -B test-compile exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install --with-deps chromium" -Dexec.classpathScope=test
 
       - name: Run test suite
-        run: mvn -B clean test -DexcludedGroups=known-issue
+        run: mvn -B clean test
 
       - name: Generate Allure report
         if: always()
@@ -37,14 +37,6 @@ jobs:
         with:
           name: allure-report
           path: target/site/allure-maven-plugin
-          retention-days: 14
-
-      - name: Upload Surefire reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: surefire-reports
-          path: target/surefire-reports
           retention-days: 14
 
       - name: Upload UI failure screenshots
